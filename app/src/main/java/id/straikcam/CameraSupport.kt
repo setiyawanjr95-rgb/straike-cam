@@ -7,21 +7,72 @@ import android.media.CamcorderProfile
 import android.media.MediaCodec
 import android.media.MediaCodecList
 import android.media.MediaFormat
+import android.os.Build
 import android.util.Size
 
-/** What the back camera + video encoder of this phone can record. */
-class CameraSupport(context: Context) {
+/**
+ * What the back camera + video encoder of this phone can record.
+ * With [wide] the ultra wide lens (0.5x) is used when the phone has one: either as its own
+ * camera id, or as a zoom ratio below 1 on the main (logical) camera.
+ */
+class CameraSupport(context: Context, wide: Boolean = false) {
 
     val cameraId: String
     val characteristics: CameraCharacteristics
     private val sizes: List<Size>
 
+    /** True when this phone offers an ultra wide lens we can reach. */
+    val ultraWideAvailable: Boolean
+
+    /** Zoom ratio to request (0.5 on logical cameras that expose ultra wide through zoom, else 1). */
+    val zoomRatio: Float
+
+    /** True when the ultra wide lens is really in use. */
+    val usingUltraWide: Boolean
+
     init {
         val manager = context.getSystemService(CameraManager::class.java)
-        cameraId = manager.cameraIdList.firstOrNull {
+        val back = manager.cameraIdList.filter {
             manager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) ==
                 CameraCharacteristics.LENS_FACING_BACK
-        } ?: throw IllegalStateException("Kamera belakang tidak ditemukan")
+        }
+        val mainId = back.firstOrNull() ?: throw IllegalStateException("Kamera belakang tidak ditemukan")
+        val mainChars = manager.getCameraCharacteristics(mainId)
+
+        fun equivalentFocal(id: String): Float? {
+            val c = manager.getCameraCharacteristics(id)
+            val focal = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.minOrNull() ?: return null
+            val size = c.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE) ?: return null
+            return focal * 43.27f / Math.hypot(size.width.toDouble(), size.height.toDouble()).toFloat()
+        }
+
+        val zoomLow = if (Build.VERSION.SDK_INT >= 30) {
+            mainChars.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)?.lower ?: 1f
+        } else 1f
+        val zoomWide = zoomLow <= 0.6f
+
+        val mainEq = equivalentFocal(mainId)
+        var wideId: String? = null
+        if (mainEq != null) {
+            for (id in back.drop(1)) {
+                val eq = equivalentFocal(id) ?: continue
+                val best = wideId?.let { equivalentFocal(it) } ?: Float.MAX_VALUE
+                if (eq < mainEq * 0.75f && eq < best) wideId = id
+            }
+        }
+
+        ultraWideAvailable = zoomWide || wideId != null
+        usingUltraWide = wide && ultraWideAvailable
+        if (usingUltraWide && zoomWide) {
+            cameraId = mainId
+            zoomRatio = maxOf(0.5f, zoomLow)
+        } else if (usingUltraWide) {
+            cameraId = wideId!!
+            zoomRatio = 1f
+        } else {
+            cameraId = mainId
+            zoomRatio = 1f
+        }
         characteristics = manager.getCameraCharacteristics(cameraId)
         sizes = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
             ?.getOutputSizes(MediaCodec::class.java)?.toList() ?: emptyList()
@@ -97,7 +148,7 @@ class CameraSupport(context: Context) {
 
     /** Plain-text report of what the camera says, shown in the app so odd phones can be diagnosed. */
     fun report(): String = buildString {
-        append("Kamera belakang id $cameraId\n")
+        append("Kamera belakang id $cameraId, lensa ${if (usingUltraWide) "ultra wide 0.5x" else "utama 1x"}, ultra wide ${if (ultraWideAvailable) "ada" else "tidak ada"}\n")
         append("AE fps: ").append(aeRanges()?.joinToString(" ") { "[${it.lower}-${it.upper}]" } ?: "-").append('\n')
         for (h in listOf(720, 1080, 2160)) {
             val size = sizeFor(h)

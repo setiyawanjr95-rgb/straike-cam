@@ -83,6 +83,8 @@ class MainActivity : ComponentActivity() {
         binding.chkPreRoll.isChecked = Prefs.preRoll(this)
         binding.chkSound.isChecked = Prefs.sound(this)
         binding.chkVibrate.isChecked = Prefs.vibrate(this)
+        binding.chkStabilize.isChecked = LensPrefs.stabilize(this)
+        binding.chkStabilize.setOnCheckedChangeListener { _, on -> LensPrefs.setStabilize(this, on) }
         binding.chkPreRoll.setOnCheckedChangeListener { _, on -> Prefs.setPreRoll(this, on) }
         binding.chkSound.setOnCheckedChangeListener { _, on -> Prefs.setSound(this, on) }
         binding.chkVibrate.setOnCheckedChangeListener { _, on -> Prefs.setVibrate(this, on) }
@@ -154,9 +156,19 @@ class MainActivity : ComponentActivity() {
     /** Fills the resolution / fps pickers with only what this phone can record. */
     private fun setupQualityPickers() {
         support = try {
-            CameraSupport(this)
+            CameraSupport(this, LensPrefs.ultraWide(this))
         } catch (e: Exception) {
             null
+        }
+        val wideOk = support?.ultraWideAvailable == true
+        binding.spinLens.adapter = adapter(if (wideOk) listOf("1x (utama)", "0.5x (ultra wide)") else listOf("1x (utama)"))
+        binding.spinLens.setSelection(if (wideOk && LensPrefs.ultraWide(this)) 1 else 0)
+        binding.spinLens.onItemSelectedListener = onSelect { pos ->
+            val wide = pos == 1
+            if (wide != (wideOk && LensPrefs.ultraWide(this))) {
+                LensPrefs.setUltraWide(this, wide)
+                setupQualityPickers()
+            }
         }
         heights = support?.supportedHeights()?.ifEmpty { null } ?: listOf(720, 1080)
         val savedHeight = VideoPrefs.height(this)
@@ -229,7 +241,7 @@ class MainActivity : ComponentActivity() {
         updatePulse(status.mode)
 
         val editable = status.mode == Mode.OFF || status.mode == Mode.ERROR
-        listOf<View>(binding.spinResolution, binding.spinFps, binding.chkPreRoll).forEach {
+        listOf<View>(binding.spinLens, binding.spinResolution, binding.spinFps, binding.chkPreRoll, binding.chkStabilize).forEach {
             it.isEnabled = editable
             it.alpha = if (editable) 1f else 0.4f
         }

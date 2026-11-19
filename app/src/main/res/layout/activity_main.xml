@@ -189,6 +189,31 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:text="Lensa"
+                android:textColor="@color/text"
+                android:textSize="15sp" />
+
+            <Spinner
+                android:id="@+id/spinLens"
+                android:layout_width="150dp"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_field"
+                android:paddingStart="8dp"
+                android:popupBackground="@color/card" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
                 android:text="Resolusi"
                 android:textColor="@color/text"
                 android:textSize="15sp" />
@@ -262,6 +287,25 @@
                 android:text="Simpan 30 detik sebelum straik. Kamera menyala terus, jadi lebih boros baterai dan HP lebih hangat."
                 android:textColor="@color/muted"
                 android:textSize="12sp" />
+        <Switch
+            android:id="@+id/chkStabilize"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="Stabilizer video"
+            android:textColor="@color/text"
+            android:textSize="15sp"
+            android:thumbTint="@color/switch_thumb"
+            android:trackTint="@color/switch_track" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:paddingEnd="64dp"
+            android:text="Meredam goyangan HP. Gambar bisa sedikit lebih sempit."
+            android:textColor="@color/muted"
+            android:textSize="12sp" />
+
         </LinearLayout>
 
         <LinearLayout

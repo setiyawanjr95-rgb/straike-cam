@@ -31,3 +31,15 @@ object VideoPrefs {
     fun fps(context: Context) = sp(context).getInt("fps", 30)
     fun setFps(context: Context, f: Int) = sp(context).edit().putInt("fps", f).apply()
 }
+
+/** Camera choices: which lens, and whether to stabilize. */
+object LensPrefs {
+    private fun sp(context: Context) = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+
+    /** True = ultra wide (0.5x), false = main lens (1x). */
+    fun ultraWide(context: Context) = sp(context).getBoolean("ultra_wide", false)
+    fun setUltraWide(context: Context, on: Boolean) = sp(context).edit().putBoolean("ultra_wide", on).apply()
+
+    fun stabilize(context: Context) = sp(context).getBoolean("stabilize", true)
+    fun setStabilize(context: Context, on: Boolean) = sp(context).edit().putBoolean("stabilize", on).apply()
+}

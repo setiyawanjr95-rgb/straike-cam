@@ -83,7 +83,7 @@ class StandbyService : Service() {
         io.execute {
             try {
                 val loaded = Words.loadModel(this)
-                val cam = CameraSupport(this)
+                val cam = CameraSupport(this, LensPrefs.ultraWide(this))
                 handler.post {
                     if (!running) {
                         loaded.close()
@@ -108,10 +108,11 @@ class StandbyService : Service() {
             preRollUs = if (preRoll) Prefs.PRE_ROLL_SECONDS * 1_000_000L else 0L,
             onFinished = ::onClipFinished,
         )
-        val vid = VideoEngine(this, cam, height, fps, rec) { msg -> handler.post { fail(msg) } }
+        val vid = VideoEngine(this, cam, height, fps, rec, LensPrefs.stabilize(this)) { msg -> handler.post { fail(msg) } }
         val aud = AudioEngine(loaded, vid::nowUs, rec, ::onWord) { msg -> fail(msg) }
         val realFps = vid.actualFps
         qualityLabel = "${CameraSupport.label(height)} ${realFps}fps" +
+            (if (cam.usingUltraWide) " 0.5x" else "") +
             if (realFps < fps) " (kamera tidak mendukung ${fps}fps)" else ""
         recorder = rec
         video = vid

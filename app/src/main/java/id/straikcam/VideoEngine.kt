@@ -29,6 +29,7 @@ class VideoEngine(
     private val height: Int,
     private val fps: Int,
     private val sink: ClipRecorder,
+    private val stabilize: Boolean,
     private val onError: (String) -> Unit,
 ) {
     private val cameraManager = context.getSystemService(CameraManager::class.java)
@@ -183,12 +184,17 @@ class VideoEngine(
                         val request = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                             addTarget(target)
                             set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, pickFpsRange(chars))
-                            // Stabilization crops and adds delay; skip it at high load (4K or 60 fps).
-                            val stab = chars.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)
-                            if (height <= 1080 && actualFps <= 30 &&
-                                stab?.contains(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON) == true
-                            ) {
-                                set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)
+                            if (stabilize) {
+                                val eis = chars.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)
+                                val ois = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION)
+                                if (eis?.contains(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON) == true) {
+                                    set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)
+                                } else if (ois?.contains(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON) == true) {
+                                    set(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE, CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON)
+                                }
+                            }
+                            if (android.os.Build.VERSION.SDK_INT >= 30 && support.zoomRatio != 1f) {
+                                set(CaptureRequest.CONTROL_ZOOM_RATIO, support.zoomRatio)
                             }
                         }
                         s.setRepeatingRequest(request.build(), null, handler)
