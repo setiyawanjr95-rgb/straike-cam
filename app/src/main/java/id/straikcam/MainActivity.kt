@@ -169,13 +169,17 @@ class MainActivity : ComponentActivity() {
             refreshFps(h)
         }
         refreshFps(heights[heightIndex])
+        binding.camInfo.text = support?.report() ?: "Kamera tidak terbaca"
     }
 
     private fun refreshFps(height: Int) {
         fpsOptions = listOf(30, 60).filter { it == 30 || support?.supports(height, it) == true }
+        val fpsLabels = fpsOptions.map {
+            if (it == 60 && support?.cameraConfirms(height, 60) != true) "60 fps (uji coba)" else "$it fps"
+        }
         val saved = VideoPrefs.fps(this)
         val index = fpsOptions.indexOf(saved).takeIf { it >= 0 } ?: 0
-        binding.spinFps.adapter = adapter(fpsOptions.map { "$it fps" })
+        binding.spinFps.adapter = adapter(fpsLabels)
         binding.spinFps.setSelection(index)
         VideoPrefs.setFps(this, fpsOptions[index])
         binding.spinFps.onItemSelectedListener = onSelect { pos -> VideoPrefs.setFps(this, fpsOptions[pos]) }

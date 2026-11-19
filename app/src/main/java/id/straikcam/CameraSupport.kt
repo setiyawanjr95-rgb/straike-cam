@@ -36,23 +36,34 @@ class CameraSupport(context: Context) {
 
     fun sizeFor(height: Int): Size? = sizes.firstOrNull { it.height == height && it.width == height * 16 / 9 }
 
+    /** Encoder can do this size and rate. For 60 fps the camera may still refuse; see [cameraConfirms]. */
     fun supports(height: Int, fps: Int): Boolean {
         val size = sizeFor(height) ?: return false
-        if (!encoderSupports(size, fps)) return false
+        return encoderSupports(size, fps)
+    }
+
+    private fun aeRanges() = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
+
+    /** True when the camera itself says it can deliver [fps] at this height. */
+    fun cameraConfirms(height: Int, fps: Int): Boolean {
         if (fps <= 30) return true
-        val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) ?: return false
-        val ranges = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES) ?: return false
-        if (ranges.none { it.upper >= fps }) return false
-        // Many phones only list 60 fps for the camera preview classes, not for MediaCodec,
-        // even though recording at 60 fps works. Accept if any output class allows it.
+        val size = sizeFor(height) ?: return false
+        if (aeRanges()?.any { it.upper >= fps } != true) return false
         val limitNs = 1_000_000_000L / fps + 500_000L
-        val durations = listOf(
+        return minDurationsNs(size).any { it in 0..limitNs }
+    }
+
+    /** What the camera will really run at: the asked fps if it has a range for it, else 30. */
+    fun effectiveFps(fps: Int): Int =
+        if (fps <= 30 || aeRanges()?.any { it.upper >= fps } == true) fps else 30
+
+    private fun minDurationsNs(size: Size): List<Long> {
+        val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) ?: return emptyList()
+        return listOf(
             runCatching { map.getOutputMinFrameDuration(MediaCodec::class.java, size) }.getOrDefault(0L),
             runCatching { map.getOutputMinFrameDuration(android.graphics.SurfaceTexture::class.java, size) }.getOrDefault(0L),
             runCatching { map.getOutputMinFrameDuration(android.graphics.ImageFormat.YUV_420_888, size) }.getOrDefault(0L),
         )
-        // 0 means "unknown": the HAL does not restrict it, so trust the fps range.
-        return durations.any { it in 0..limitNs }
     }
 
     /** Heights (720/1080/2160) this phone can record at 30 fps. */
@@ -64,6 +75,21 @@ class CameraSupport(context: Context) {
         val h = heights.lastOrNull { it <= height } ?: heights.first()
         val f = if (fps >= 60 && supports(h, 60)) 60 else 30
         return h to f
+    }
+
+    /** Plain-text report of what the camera says, shown in the app so odd phones can be diagnosed. */
+    fun report(): String = buildString {
+        append("Kamera belakang id $cameraId\n")
+        append("AE fps: ").append(aeRanges()?.joinToString(" ") { "[${it.lower}-${it.upper}]" } ?: "-").append('\n')
+        for (h in listOf(720, 1080, 2160)) {
+            val size = sizeFor(h)
+            if (size == null) { append("${CameraSupport.label(h)}: tidak ada\n"); continue }
+            val ms = minDurationsNs(size).joinToString("/") { if (it <= 0) "?" else "%.0f".format(it / 1_000_000.0) }
+            append("${CameraSupport.label(h)}: frame min $ms ms, encoder 60fps ${if (encoderSupports(size, 60)) "ya" else "tidak"}\n")
+        }
+        val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+        val hs = map?.highSpeedVideoFpsRanges?.joinToString(" ") { "[${it.lower}-${it.upper}]" }
+        append("High-speed: ").append(if (hs.isNullOrEmpty()) "tidak ada" else hs)
     }
 
     private fun encoderSupports(size: Size, fps: Int): Boolean {

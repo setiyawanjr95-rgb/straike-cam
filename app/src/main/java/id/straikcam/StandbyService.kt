@@ -102,7 +102,6 @@ class StandbyService : Service() {
     private fun startEngines(loaded: Model, cam: CameraSupport) {
         preRoll = Prefs.preRoll(this)
         val (height, fps) = cam.resolve(VideoPrefs.height(this), VideoPrefs.fps(this))
-        qualityLabel = "${CameraSupport.label(height)} ${fps}fps"
 
         val rec = ClipRecorder(
             this,
@@ -111,6 +110,9 @@ class StandbyService : Service() {
         )
         val vid = VideoEngine(this, cam, height, fps, rec) { msg -> handler.post { fail(msg) } }
         val aud = AudioEngine(loaded, vid::nowUs, rec, ::onWord) { msg -> fail(msg) }
+        val realFps = vid.actualFps
+        qualityLabel = "${CameraSupport.label(height)} ${realFps}fps" +
+            if (realFps < fps) " (kamera tidak mendukung ${fps}fps)" else ""
         recorder = rec
         video = vid
         audio = aud

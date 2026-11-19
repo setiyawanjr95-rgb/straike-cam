@@ -42,6 +42,9 @@ class VideoEngine(
     private var session: CameraCaptureSession? = null
     @Volatile private var running = false
 
+    /** The frame rate the camera will really deliver (may be lower than asked). */
+    val actualFps: Int = support.effectiveFps(fps)
+
     /** Current time on the same clock the camera stamps its frames with, in microseconds. */
     fun nowUs(): Long =
         if (support.realtimeTimestamps) SystemClock.elapsedRealtimeNanos() / 1000 else System.nanoTime() / 1000
@@ -68,8 +71,8 @@ class VideoEngine(
         val size = support.sizeFor(height) ?: throw IllegalStateException("Resolusi ${height}p tidak didukung")
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, size.width, size.height).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-            setInteger(MediaFormat.KEY_BIT_RATE, CameraSupport.bitrate(height, fps))
-            setInteger(MediaFormat.KEY_FRAME_RATE, fps)
+            setInteger(MediaFormat.KEY_BIT_RATE, CameraSupport.bitrate(height, actualFps))
+            setInteger(MediaFormat.KEY_FRAME_RATE, actualFps)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
             setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
         }
@@ -155,7 +158,7 @@ class VideoEngine(
                             set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, pickFpsRange(chars))
                             // Stabilization crops and adds delay; skip it at high load (4K or 60 fps).
                             val stab = chars.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)
-                            if (height <= 1080 && fps <= 30 &&
+                            if (height <= 1080 && actualFps <= 30 &&
                                 stab?.contains(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON) == true
                             ) {
                                 set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)
@@ -176,10 +179,12 @@ class VideoEngine(
     }
 
     private fun pickFpsRange(chars: CameraCharacteristics): Range<Int> {
-        val ranges = chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES) ?: return Range(fps, fps)
-        return ranges.firstOrNull { it.lower == fps && it.upper == fps }
-            ?: ranges.filter { it.upper == fps }.maxByOrNull { it.lower }
-            ?: ranges.maxByOrNull { it.upper } ?: Range(fps, fps)
+        val f = actualFps
+        val ranges = chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES) ?: return Range(f, f)
+        return ranges.firstOrNull { it.lower == f && it.upper == f }
+            ?: ranges.filter { it.upper == f }.maxByOrNull { it.lower }
+            ?: ranges.filter { it.upper >= f }.minByOrNull { it.upper }
+            ?: ranges.maxByOrNull { it.upper } ?: Range(f, f)
     }
 
     private fun close() {
