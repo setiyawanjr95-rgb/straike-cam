@@ -71,7 +71,11 @@ class AudioEngine(
         try {
             while (running) {
                 val n = record.read(chunk, 0, chunk.size)
-                if (n <= 0) continue
+                if (n < 0) {
+                    main.post { onError("Mikrofon terputus (kode $n)") }
+                    break
+                }
+                if (n == 0) continue
                 val endUs = clockUs()
 
                 // 48 kHz -> 16 kHz for the recognizer.

@@ -51,6 +51,7 @@ class ClipRecorder(
     private var lastAudioPts = -1L
     private var clipStartUs = 0L
     private var hasVideo = false
+    private var writeFailed = false
 
     @Volatile
     var orientationHint = 0
@@ -169,22 +170,30 @@ class ClipRecorder(
         lastVideoPts = -1L
         lastAudioPts = -1L
         hasVideo = false
+        writeFailed = false
     }
 
     private fun write(s: EncodedSample) {
         val m = muxer ?: return
         val info = MediaCodec.BufferInfo()
-        if (s.isVideo) {
-            if (s.ptsUs <= lastVideoPts) return
-            lastVideoPts = s.ptsUs
-            hasVideo = true
-            info.set(0, s.data.size, s.ptsUs, s.flags)
-            m.writeSampleData(videoTrack, ByteBuffer.wrap(s.data), info)
-        } else {
-            if (audioTrack < 0 || s.ptsUs <= lastAudioPts || s.ptsUs < clipStartUs) return
-            lastAudioPts = s.ptsUs
-            info.set(0, s.data.size, s.ptsUs, s.flags)
-            m.writeSampleData(audioTrack, ByteBuffer.wrap(s.data), info)
+        try {
+            if (s.isVideo) {
+                if (s.ptsUs <= lastVideoPts) return
+                if (s.ptsUs < clipStartUs) return
+                lastVideoPts = s.ptsUs
+                hasVideo = true
+                // Timestamps start at 0 in the file; raw camera clock values are huge.
+                info.set(0, s.data.size, s.ptsUs - clipStartUs, s.flags)
+                m.writeSampleData(videoTrack, ByteBuffer.wrap(s.data), info)
+            } else {
+                if (audioTrack < 0 || s.ptsUs <= lastAudioPts || s.ptsUs < clipStartUs) return
+                lastAudioPts = s.ptsUs
+                info.set(0, s.data.size, s.ptsUs - clipStartUs, s.flags)
+                m.writeSampleData(audioTrack, ByteBuffer.wrap(s.data), info)
+            }
+        } catch (e: Exception) {
+            // A bad sample must never crash the app; keep what was written so far.
+            writeFailed = true
         }
     }
 

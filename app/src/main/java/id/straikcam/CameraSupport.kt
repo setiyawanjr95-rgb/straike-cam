@@ -41,9 +41,18 @@ class CameraSupport(context: Context) {
         if (!encoderSupports(size, fps)) return false
         if (fps <= 30) return true
         val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) ?: return false
-        val minFrameNs = map.getOutputMinFrameDuration(MediaCodec::class.java, size)
         val ranges = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES) ?: return false
-        return minFrameNs in 1..(1_000_000_000L / fps) && ranges.any { it.upper >= fps }
+        if (ranges.none { it.upper >= fps }) return false
+        // Many phones only list 60 fps for the camera preview classes, not for MediaCodec,
+        // even though recording at 60 fps works. Accept if any output class allows it.
+        val limitNs = 1_000_000_000L / fps + 500_000L
+        val durations = listOf(
+            runCatching { map.getOutputMinFrameDuration(MediaCodec::class.java, size) }.getOrDefault(0L),
+            runCatching { map.getOutputMinFrameDuration(android.graphics.SurfaceTexture::class.java, size) }.getOrDefault(0L),
+            runCatching { map.getOutputMinFrameDuration(android.graphics.ImageFormat.YUV_420_888, size) }.getOrDefault(0L),
+        )
+        // 0 means "unknown": the HAL does not restrict it, so trust the fps range.
+        return durations.any { it in 0..limitNs }
     }
 
     /** Heights (720/1080/2160) this phone can record at 30 fps. */

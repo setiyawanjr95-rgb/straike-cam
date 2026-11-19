@@ -71,6 +71,7 @@ class VideoEngine(
             setInteger(MediaFormat.KEY_BIT_RATE, CameraSupport.bitrate(height, fps))
             setInteger(MediaFormat.KEY_FRAME_RATE, fps)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+            setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
         }
         val c = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
         c.setCallback(object : MediaCodec.Callback() {
@@ -97,7 +98,7 @@ class VideoEngine(
             }
 
             override fun onOutputFormatChanged(codec: MediaCodec, format: MediaFormat) {
-                sink.setVideoFormat(format)
+                try { sink.setVideoFormat(format) } catch (e: Exception) { onError("Gagal menyiapkan video: ${e.message}") }
             }
         }, handler)
         c.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
@@ -114,7 +115,11 @@ class VideoEngine(
                     return
                 }
                 camera = device
-                createSession(device, s)
+                try {
+                    createSession(device, s)
+                } catch (e: Exception) {
+                    onError("Kamera gagal mulai: ${e.message}")
+                }
             }
 
             override fun onDisconnected(device: CameraDevice) {
@@ -144,15 +149,18 @@ class VideoEngine(
                     }
                     session = s
                     val chars = support.characteristics
-                    val request = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
-                        addTarget(target)
-                        set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, pickFpsRange(chars))
-                        val stab = chars.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)
-                        if (stab?.contains(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON) == true) {
-                            set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)
-                        }
-                    }
                     try {
+                        val request = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
+                            addTarget(target)
+                            set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, pickFpsRange(chars))
+                            // Stabilization crops and adds delay; skip it at high load (4K or 60 fps).
+                            val stab = chars.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)
+                            if (height <= 1080 && fps <= 30 &&
+                                stab?.contains(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON) == true
+                            ) {
+                                set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON)
+                            }
+                        }
                         s.setRepeatingRequest(request.build(), null, handler)
                     } catch (e: Exception) {
                         onError("Kamera gagal mulai: ${e.message}")

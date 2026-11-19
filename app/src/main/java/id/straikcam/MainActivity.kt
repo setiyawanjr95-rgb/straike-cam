@@ -68,6 +68,12 @@ class MainActivity : ComponentActivity() {
             }
         }
         binding.btnBattery.setOnClickListener { openBatterySettings() }
+        binding.btnUpdate.setOnClickListener { checkUpdate(auto = false) }
+        binding.btnCrashClose.setOnClickListener {
+            CrashLog.clear(this)
+            showCrash()
+        }
+        showCrash()
         binding.btnTestTone.setOnClickListener {
             feedback.recordingStarted()
             Handler(Looper.getMainLooper()).postDelayed({ feedback.recordingStopped() }, 1200)
@@ -87,6 +93,61 @@ class MainActivity : ComponentActivity() {
                 AppState.status.collect { render(it) }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val mode = AppState.status.value.mode
+        if (mode == Mode.OFF || mode == Mode.ERROR) checkUpdate(auto = true)
+    }
+
+    private fun showCrash() {
+        val log = CrashLog.read(this)
+        binding.crashInfo.visibility = if (log == null) View.GONE else View.VISIBLE
+        binding.btnCrashClose.visibility = if (log == null) View.GONE else View.VISIBLE
+        if (log != null) binding.crashInfo.text = "Aplikasi sempat crash. Kirim teks ini ke developer:\n\n$log"
+    }
+
+    private var updating = false
+
+    /** Looks for a newer release; when found, downloads it and opens the Android installer. */
+    private fun checkUpdate(auto: Boolean) {
+        if (updating) return
+        updating = true
+        val info = binding.updateInfo
+        if (!auto) { info.visibility = View.VISIBLE; info.text = "Mengecek update..." }
+        val ui = Handler(Looper.getMainLooper())
+        Thread {
+            when (val result = Updater.check(this)) {
+                is Updater.Check.Newer -> {
+                    val r = result.release
+                    ui.post { info.visibility = View.VISIBLE; info.text = "Versi ${r.name} ditemukan, mengunduh..." }
+                    try {
+                        val apk = Updater.download(this, r) { pct ->
+                            ui.post { info.text = "Mengunduh versi ${r.name}: $pct%" }
+                        }
+                        ui.post {
+                            if (!packageManager.canRequestPackageInstalls()) {
+                                info.text = "Izinkan Straik Cam memasang aplikasi, lalu tekan Cek update lagi."
+                                startActivity(
+                                    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")),
+                                )
+                            } else {
+                                info.text = "Versi ${r.name} siap, ikuti layar pemasangan."
+                                try { Updater.install(this, apk) } catch (e: Exception) {
+                                    info.text = "Gagal memasang update: ${e.message}"
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        ui.post { info.visibility = View.VISIBLE; info.text = "Gagal mengunduh update" }
+                    }
+                }
+                is Updater.Check.UpToDate -> if (!auto) ui.post { info.text = "Sudah versi terbaru" }
+                is Updater.Check.Failed -> if (!auto) ui.post { info.text = "Cek update gagal: ${result.reason}" }
+            }
+            ui.post { updating = false }
+        }.start()
     }
 
     /** Fills the resolution / fps pickers with only what this phone can record. */
