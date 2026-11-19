@@ -45,15 +45,9 @@ android {
 }
 
 dependencies {
-    val camerax = "1.4.1"
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-ktx:1.9.3")
-    implementation("androidx.lifecycle:lifecycle-service:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("androidx.camera:camera-core:$camerax")
-    implementation("androidx.camera:camera-camera2:$camerax")
-    implementation("androidx.camera:camera-lifecycle:$camerax")
-    implementation("androidx.camera:camera-video:$camerax")
     implementation("com.alphacephei:vosk-android:0.3.47")
     implementation("net.java.dev.jna:jna:5.13.0@aar")
 }

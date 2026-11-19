@@ -1,55 +1,168 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#FF10161D"
-    android:gravity="center_horizontal"
-    android:orientation="vertical"
-    android:padding="24dp">
+    android:fillViewport="true">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
-        android:text="Straik Cam"
-        android:textColor="#FFFFFFFF"
-        android:textSize="28sp"
-        android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/status"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:gravity="center"
-        android:text="Siaga mati"
-        android:textColor="#FFB0BEC5"
-        android:textSize="18sp" />
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:padding="24dp">
 
-    <Button
-        android:id="@+id/btnStandby"
-        android:layout_width="220dp"
-        android:layout_height="220dp"
-        android:layout_marginTop="40dp"
-        android:backgroundTint="#FF2E7D32"
-        android:text="SIAGA"
-        android:textColor="#FFFFFFFF"
-        android:textSize="30sp"
-        android:textStyle="bold" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Straik Cam"
+            android:textColor="#FFFFFFFF"
+            android:textSize="28sp"
+            android:textStyle="bold" />
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
-        android:gravity="center"
-        android:text="Teriak &quot;STRAIK&quot; untuk mulai rekam.\nBilang &quot;STOP&quot; untuk berhenti.\nLayar boleh dimatikan setelah Siaga nyala."
-        android:textColor="#FFCFD8DC"
-        android:textSize="16sp" />
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
+            android:text="Siaga mati"
+            android:textColor="#FFB0BEC5"
+            android:textSize="17sp" />
 
-    <Button
-        android:id="@+id/btnBattery"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
-        android:text="Atur penghemat baterai" />
-</LinearLayout>
+        <Button
+            android:id="@+id/btnStandby"
+            android:layout_width="200dp"
+            android:layout_height="200dp"
+            android:layout_marginTop="24dp"
+            android:backgroundTint="#FF2E7D32"
+            android:text="SIAGA"
+            android:textColor="#FFFFFFFF"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:gravity="center"
+            android:text="Teriak &quot;STRAIK&quot; untuk mulai rekam, bilang &quot;STOP&quot; untuk berhenti. Layar boleh dimatikan setelah Siaga nyala."
+            android:textColor="#FFCFD8DC"
+            android:textSize="15sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:text="PENGATURAN"
+            android:textColor="#FF90A4AE"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/settingsNote"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Matikan Siaga dulu untuk mengubah video dan pre-roll."
+            android:textColor="#FFFFB74D"
+            android:textSize="13sp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Resolusi"
+                android:textColor="#FFFFFFFF"
+                android:textSize="16sp" />
+
+            <Spinner
+                android:id="@+id/spinResolution"
+                android:layout_width="160dp"
+                android:layout_height="48dp"
+                android:backgroundTint="#FFFFFFFF"
+                android:popupBackground="#FF263238" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Frame rate"
+                android:textColor="#FFFFFFFF"
+                android:textSize="16sp" />
+
+            <Spinner
+                android:id="@+id/spinFps"
+                android:layout_width="160dp"
+                android:layout_height="48dp"
+                android:backgroundTint="#FFFFFFFF"
+                android:popupBackground="#FF263238" />
+        </LinearLayout>
+
+        <CheckBox
+            android:id="@+id/chkPreRoll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:buttonTint="#FF66BB6A"
+            android:text="Simpan 30 detik sebelum &quot;straik&quot; (pre-roll)"
+            android:textColor="#FFFFFFFF"
+            android:textSize="16sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="32dp"
+            android:text="Kamera menyala terus selama Siaga, jadi lebih boros baterai dan HP lebih hangat."
+            android:textColor="#FF90A4AE"
+            android:textSize="13sp" />
+
+        <CheckBox
+            android:id="@+id/chkSound"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:buttonTint="#FF66BB6A"
+            android:text="Nada saat mulai dan berhenti rekam"
+            android:textColor="#FFFFFFFF"
+            android:textSize="16sp" />
+
+        <CheckBox
+            android:id="@+id/chkVibrate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:buttonTint="#FF66BB6A"
+            android:text="Getar saat mulai dan berhenti rekam"
+            android:textColor="#FFFFFFFF"
+            android:textSize="16sp" />
+
+        <Button
+            android:id="@+id/btnTestTone"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Coba nada" />
+
+        <Button
+            android:id="@+id/btnBattery"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Atur penghemat baterai" />
+    </LinearLayout>
+</ScrollView>
