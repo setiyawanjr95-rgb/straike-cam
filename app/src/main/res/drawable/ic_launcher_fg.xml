@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fishing rod, line, bobber and hook over water. Content stays inside the 66dp adaptive-icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- water -->
+    <path android:pathData="M26,84 Q32,79 38,84 T50,84 T62,84 T74,84 T82,84"
+        android:strokeColor="#FF7FE3D2" android:strokeWidth="3" android:strokeLineCap="round" />
+    <!-- rod handle -->
+    <path android:pathData="M30,80 L43,63"
+        android:strokeColor="#FFFFB547" android:strokeWidth="7" android:strokeLineCap="round" />
+    <!-- rod -->
+    <path android:pathData="M43,63 L78,24"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="3.5" android:strokeLineCap="round" />
+    <!-- line -->
+    <path android:pathData="M78,24 L78,52"
+        android:strokeColor="#FFE8F1F6" android:strokeWidth="1.6" android:strokeLineCap="round" />
+    <!-- bobber -->
+    <path android:fillColor="#FFF0443D" android:pathData="M72.5,56 a5.5,5.5 0 1,1 11,0 z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M72.5,56 a5.5,5.5 0 0,0 11,0 z" />
+    <path android:pathData="M78,61.5 L78,68"
+        android:strokeColor="#FFE8F1F6" android:strokeWidth="1.6" />
+    <!-- hook -->
+    <path android:pathData="M78,67 L78,74 Q78,80 72.5,80 Q68,80 68,75.5 M68,75.5 L65.5,77.5"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="2.6" android:strokeLineCap="round" android:strokeLineJoin="round" />
+</vector>

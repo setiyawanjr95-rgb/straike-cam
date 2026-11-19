@@ -10,5 +10,6 @@
     <color name="warn">#FFFFB547</color>
     <color name="text">#FFE8F1F6</color>
     <color name="muted">#FF8BA3B3</color>
+    <color name="icon_bg">#FF0E7C6B</color>
     <color name="off">#FF3A5266</color>
 </resources>
