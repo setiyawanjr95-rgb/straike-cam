@@ -7,6 +7,7 @@ import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.net.Uri
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
@@ -36,12 +37,19 @@ class ClipRecorder(
     private val main = Handler(Looper.getMainLooper())
     private val buffer = ArrayDeque<EncodedSample>()
 
+    // All muxer work (open, write, finish) happens on this one thread, so the encoder threads
+    // and the main thread never wait on disk I/O. Fields below marked "writer" are only touched here.
+    private val writerThread = HandlerThread("clipwriter").apply { start() }
+    private val writer = Handler(writerThread.looper)
+    private var sessionId = 0
+
     private var state = State.IDLE
     private var videoFormat: MediaFormat? = null
     private var audioFormat: MediaFormat? = null
     private var triggerUs = 0L
     private var latestUs = 0L
 
+    // writer thread only:
     private var muxer: MediaMuxer? = null
     private var pfd: ParcelFileDescriptor? = null
     private var uri: Uri? = null
@@ -69,7 +77,7 @@ class ClipRecorder(
     fun onSample(sample: EncodedSample) = synchronized(lock) {
         if (sample.ptsUs > latestUs) latestUs = sample.ptsUs
         if (state == State.RECORDING) {
-            write(sample)
+            writer.post { write(sample) }
         } else {
             buffer.addLast(sample)
             trim()
@@ -93,14 +101,18 @@ class ClipRecorder(
                 state = State.IDLE
                 post(false, "Rekaman terlalu pendek, tidak disimpan")
             }
-            State.RECORDING -> finish()
+            State.RECORDING -> {
+                state = State.IDLE
+                writer.post { finish() }
+            }
         }
     }
 
     fun release() = synchronized(lock) {
-        if (state == State.RECORDING) finish()
+        if (state == State.RECORDING) writer.post { finish() }
         state = State.IDLE
         buffer.clear()
+        writerThread.quitSafely() // already-posted work (the final finish) still runs
     }
 
     private fun trim() {
@@ -126,27 +138,34 @@ class ClipRecorder(
         if (startIndex < 0) startIndex = firstKey
         if (startIndex < 0) return // wait for the first key frame
 
-        try {
-            open(vf, audioFormat)
-        } catch (e: Exception) {
-            closeQuietly()
-            state = State.IDLE
-            post(false, "Gagal membuat file video: ${e.message}")
-            return
-        }
-        state = State.RECORDING
-        clipStartUs = buffer.elementAt(startIndex).ptsUs
+        val af = audioFormat
+        val startPts = buffer.elementAt(startIndex).ptsUs
+        val snapshot = ArrayList<EncodedSample>(buffer.size)
         var i = 0
         for (s in buffer) {
-            if (i >= startIndex || !s.isVideo) {
-                if (s.ptsUs >= clipStartUs) write(s)
-            }
+            if ((i >= startIndex || !s.isVideo) && s.ptsUs >= startPts) snapshot.add(s)
             i++
         }
         buffer.clear()
+        state = State.RECORDING
+        val id = ++sessionId
+        val hint = orientationHint
+        writer.post {
+            clipStartUs = startPts
+            hasVideo = false
+            try {
+                open(vf, af, hint)
+            } catch (e: Exception) {
+                closeQuietly()
+                synchronized(lock) { if (sessionId == id && state == State.RECORDING) state = State.IDLE }
+                post(false, "Gagal membuat file video: ${e.message}")
+                return@post
+            }
+            for (s in snapshot) write(s)
+        }
     }
 
-    private fun open(vf: MediaFormat, af: MediaFormat?) {
+    private fun open(vf: MediaFormat, af: MediaFormat?, orientation: Int) {
         val name = "straik_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
@@ -162,14 +181,13 @@ class ClipRecorder(
             ?: throw IllegalStateException("Tidak bisa membuka file video")
         pfd = fd
         val m = MediaMuxer(fd.fileDescriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-        m.setOrientationHint(orientationHint)
+        m.setOrientationHint(orientation)
         videoTrack = m.addTrack(vf)
         audioTrack = if (af != null) m.addTrack(af) else -1
         m.start()
         muxer = m
         lastVideoPts = -1L
         lastAudioPts = -1L
-        hasVideo = false
         writeFailed = false
     }
 
@@ -198,7 +216,7 @@ class ClipRecorder(
     }
 
     private fun finish() {
-        state = State.IDLE
+        if (muxer == null) return // opening failed; the error was already reported
         val seconds = if (lastVideoPts > clipStartUs) (lastVideoPts - clipStartUs) / 1_000_000L else 0L
         var ok = hasVideo
         try {
