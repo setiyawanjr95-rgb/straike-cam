@@ -74,6 +74,7 @@ class MainActivity : ComponentActivity() {
             showCrash()
         }
         showCrash()
+        binding.tvVersion.text = "v" + (packageManager.getPackageInfo(packageName, 0).versionName ?: "")
         binding.btnTestTone.setOnClickListener {
             feedback.recordingStarted()
             Handler(Looper.getMainLooper()).postDelayed({ feedback.recordingStopped() }, 1200)
@@ -194,17 +195,34 @@ class MainActivity : ComponentActivity() {
         override fun onNothingSelected(parent: AdapterView<*>?) {}
     }
 
+    private var pulse: android.animation.ObjectAnimator? = null
+    private var pulseMode: Mode? = null
+
     private fun render(status: Status) {
         binding.status.text = status.message
-        val (label, color) = when (status.mode) {
-            Mode.OFF, Mode.ERROR -> "SIAGA" to "#FF2E7D32"
-            Mode.LOADING -> "MEMUAT..." to "#FF546E7A"
-            Mode.STANDBY -> "MATIKAN\nSIAGA" to "#FF37474F"
-            Mode.RECORDING -> "MEREKAM" to "#FFC62828"
+        // label on the round button, pill text, accent color
+        val (label, pill, color) = when (status.mode) {
+            Mode.OFF -> Triple("SIAGA", "SIAGA MATI", "#FF0E7C6B")
+            Mode.ERROR -> Triple("SIAGA", "ERROR", "#FF0E7C6B")
+            Mode.LOADING -> Triple("MEMUAT", "MENYIAPKAN", "#FF3A5266")
+            Mode.STANDBY -> Triple("MATIKAN\nSIAGA", "SIAGA NYALA", "#FF19C3A5")
+            Mode.RECORDING -> Triple("MEREKAM", "REC", "#FFF0443D")
         }
+        val accent = Color.parseColor(color)
         binding.btnStandby.text = label
-        binding.btnStandby.backgroundTintList = ColorStateList.valueOf(Color.parseColor(color))
-        binding.status.setTextColor(Color.parseColor(if (status.mode == Mode.ERROR) "#FFFF8A80" else "#FFB0BEC5"))
+        binding.btnStandby.backgroundTintList = ColorStateList.valueOf(accent)
+        binding.ring.backgroundTintList = ColorStateList.valueOf(accent)
+        binding.statePill.text = pill
+        val pillColor = when (status.mode) {
+            Mode.OFF -> Color.parseColor("#FF8BA3B3")
+            Mode.ERROR -> Color.parseColor("#FFFF8A80")
+            Mode.LOADING -> Color.parseColor("#FFFFB547")
+            else -> accent
+        }
+        binding.statePill.setTextColor(pillColor)
+        binding.statePill.backgroundTintList = ColorStateList.valueOf((pillColor and 0x00FFFFFF) or 0x33000000)
+        binding.status.setTextColor(Color.parseColor(if (status.mode == Mode.ERROR) "#FFFF8A80" else "#FF8BA3B3"))
+        updatePulse(status.mode)
 
         val editable = status.mode == Mode.OFF || status.mode == Mode.ERROR
         listOf<View>(binding.spinResolution, binding.spinFps, binding.chkPreRoll).forEach {
@@ -212,6 +230,35 @@ class MainActivity : ComponentActivity() {
             it.alpha = if (editable) 1f else 0.4f
         }
         binding.settingsNote.visibility = if (editable) View.GONE else View.VISIBLE
+    }
+
+    /** Ring around the main button breathes while standing by, faster while recording. */
+    private fun updatePulse(mode: Mode) {
+        if (mode == pulseMode) return
+        pulseMode = mode
+        pulse?.cancel()
+        pulse = null
+        val ring = binding.ring
+        if (mode == Mode.OFF || mode == Mode.ERROR) {
+            ring.visibility = View.INVISIBLE
+            return
+        }
+        ring.visibility = View.VISIBLE
+        val fast = mode == Mode.RECORDING
+        val holder = android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 0.95f, if (fast) 1.18f else 1.1f)
+        val holderY = android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.95f, if (fast) 1.18f else 1.1f)
+        val fade = android.animation.PropertyValuesHolder.ofFloat(View.ALPHA, 0.9f, 0f)
+        pulse = android.animation.ObjectAnimator.ofPropertyValuesHolder(ring, holder, holderY, fade).apply {
+            duration = if (fast) 900L else 1800L
+            repeatCount = android.animation.ObjectAnimator.INFINITE
+            interpolator = android.view.animation.DecelerateInterpolator()
+            start()
+        }
+    }
+
+    override fun onDestroy() {
+        pulse?.cancel()
+        super.onDestroy()
     }
 
     private fun requestAndStart() {
