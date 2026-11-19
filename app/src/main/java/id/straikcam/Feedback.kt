@@ -20,20 +20,21 @@ class Feedback(private val context: Context) {
     private val handler = Handler(Looper.getMainLooper())
 
     private companion object {
-        const val BEEP_HZ = 2400
+        // Measured from the reference beep: 1050 Hz fundamental, strong 3rd (x0.84) and 5th (x0.28) harmonic.
+        const val BEEP_HZ = 1050
     }
 
-    // GoPro style: one beep to start, three quick beeps to stop.
+    // One beep to start, three quick beeps to stop. The tone copies the beep from the reference video.
     fun recordingStarted() {
-        if (Prefs.sound(context)) play(listOf(BEEP_HZ to 380))
+        if (Prefs.sound(context)) play(listOf(BEEP_HZ to 240))
         if (Prefs.vibrate(context)) vibrate(longArrayOf(0, 500))
     }
 
     fun recordingStopped() {
         if (Prefs.sound(context)) {
-            play(listOf(BEEP_HZ to 130, 0 to 90, BEEP_HZ to 130, 0 to 90, BEEP_HZ to 130))
+            play(listOf(BEEP_HZ to 115, 0 to 90, BEEP_HZ to 115, 0 to 90, BEEP_HZ to 115))
         }
-        if (Prefs.vibrate(context)) vibrate(longArrayOf(0, 130, 90, 130, 90, 130))
+        if (Prefs.vibrate(context)) vibrate(longArrayOf(0, 115, 90, 115, 90, 115))
     }
 
     fun warning() {
@@ -57,9 +58,9 @@ class Feedback(private val context: Context) {
                         i > n - fade -> (n - i).toDouble() / fade
                         else -> 1.0
                     }
-                    // Fundamental plus odd harmonics: the thin, squarish tone of a camera piezo beeper.
+                    // Fundamental plus odd harmonics, same recipe as the reference beep.
                     val x = 2 * PI * freq * i / rate
-                    val wave = (sin(x) + sin(3 * x) / 3 + sin(5 * x) / 5) / 1.2
+                    val wave = (sin(x) + 0.84 * sin(3 * x) + 0.28 * sin(5 * x)) / 1.4
                     pcm[pos + i] = (wave * env * 0.9 * Short.MAX_VALUE).toInt().toShort()
                 }
                 pos += n
