@@ -45,9 +45,35 @@ class VideoEngine(
     /** The frame rate the camera will really deliver (may be lower than asked). */
     val actualFps: Int = support.effectiveFps(fps)
 
-    /** Current time on the same clock the camera stamps its frames with, in microseconds. */
-    fun nowUs(): Long =
-        if (support.realtimeTimestamps) SystemClock.elapsedRealtimeNanos() / 1000 else System.nanoTime() / 1000
+    /**
+     * Every timestamp in the app (audio, trigger, video) lives on the elapsedRealtime clock.
+     * Phones disagree on which clock the camera uses (and some encoders re-base to zero),
+     * so the first video frame decides how to convert.
+     */
+    fun nowUs(): Long = SystemClock.elapsedRealtimeNanos() / 1000
+
+    private var clockMode = -1 // 0 realtime, 1 uptime, 2 relative to first frame
+    private var relativeShiftUs = 0L
+
+    private fun toRealtimeUs(raw: Long): Long {
+        val realUs = SystemClock.elapsedRealtimeNanos() / 1000
+        val upUs = System.nanoTime() / 1000
+        if (clockMode < 0) {
+            val dReal = Math.abs(raw - realUs)
+            val dUp = Math.abs(raw - upUs)
+            clockMode = when {
+                minOf(dReal, dUp) > 10_000_000L -> 2
+                dUp < dReal -> 1
+                else -> 0
+            }
+            if (clockMode == 2) relativeShiftUs = realUs - raw
+        }
+        return when (clockMode) {
+            1 -> raw + (realUs - upUs)
+            2 -> raw + relativeShiftUs
+            else -> raw
+        }
+    }
 
     fun start() = handler.post {
         if (running) return@post
@@ -68,6 +94,7 @@ class VideoEngine(
 
     @SuppressLint("MissingPermission")
     private fun open() {
+        clockMode = -1
         val size = support.sizeFor(height) ?: throw IllegalStateException("Resolusi ${height}p tidak didukung")
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, size.width, size.height).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
@@ -88,7 +115,7 @@ class VideoEngine(
                         buf.position(info.offset)
                         buf.limit(info.offset + info.size)
                         buf.get(data)
-                        sink.onSample(EncodedSample(data, info.presentationTimeUs, info.flags, isVideo = true))
+                        sink.onSample(EncodedSample(data, toRealtimeUs(info.presentationTimeUs), info.flags, isVideo = true))
                     }
                     codec.releaseOutputBuffer(index, false)
                 } catch (e: IllegalStateException) {

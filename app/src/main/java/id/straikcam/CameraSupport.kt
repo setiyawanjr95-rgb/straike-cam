@@ -3,6 +3,7 @@ package id.straikcam
 import android.content.Context
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
+import android.media.CamcorderProfile
 import android.media.MediaCodec
 import android.media.MediaCodecList
 import android.media.MediaFormat
@@ -34,7 +35,23 @@ class CameraSupport(context: Context) {
         get() = characteristics.get(CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE) ==
             CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME
 
-    fun sizeFor(height: Int): Size? = sizes.firstOrNull { it.height == height && it.width == height * 16 / 9 }
+    fun sizeFor(height: Int): Size? {
+        sizes.firstOrNull { it.height == height && it.width == height * 16 / 9 }?.let { return it }
+        // Some phones hide sizes from the stream map but still list them as camcorder profiles.
+        val profile = profile(height) ?: return null
+        return Size(profile.videoFrameWidth, profile.videoFrameHeight)
+    }
+
+    private fun profile(height: Int): CamcorderProfile? {
+        val id = cameraId.toIntOrNull() ?: return null
+        val quality = when (height) {
+            720 -> CamcorderProfile.QUALITY_720P
+            1080 -> CamcorderProfile.QUALITY_1080P
+            2160 -> CamcorderProfile.QUALITY_2160P
+            else -> return null
+        }
+        return runCatching { if (CamcorderProfile.hasProfile(id, quality)) CamcorderProfile.get(id, quality) else null }.getOrNull()
+    }
 
     /** Encoder can do this size and rate. For 60 fps the camera may still refuse; see [cameraConfirms]. */
     fun supports(height: Int, fps: Int): Boolean {
@@ -48,6 +65,7 @@ class CameraSupport(context: Context) {
     fun cameraConfirms(height: Int, fps: Int): Boolean {
         if (fps <= 30) return true
         val size = sizeFor(height) ?: return false
+        if ((profile(height)?.videoFrameRate ?: 0) >= fps) return true
         if (aeRanges()?.any { it.upper >= fps } != true) return false
         val limitNs = 1_000_000_000L / fps + 500_000L
         return minDurationsNs(size).any { it in 0..limitNs }
@@ -85,7 +103,7 @@ class CameraSupport(context: Context) {
             val size = sizeFor(h)
             if (size == null) { append("${CameraSupport.label(h)}: tidak ada\n"); continue }
             val ms = minDurationsNs(size).joinToString("/") { if (it <= 0) "?" else "%.0f".format(it / 1_000_000.0) }
-            append("${CameraSupport.label(h)}: frame min $ms ms, encoder 60fps ${if (encoderSupports(size, 60)) "ya" else "tidak"}\n")
+            append("${CameraSupport.label(h)}: ${size.width}x${size.height} frame min $ms ms, profil ${profile(h)?.videoFrameRate ?: "-"}fps, encoder 60fps ${if (encoderSupports(size, 60)) "ya" else "tidak"}\n")
         }
         val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
         val hs = map?.highSpeedVideoFpsRanges?.joinToString(" ") { "[${it.lower}-${it.upper}]" }
