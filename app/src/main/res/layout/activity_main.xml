@@ -115,6 +115,12 @@
             android:layout_marginTop="8dp">
 
             <View
+                android:layout_width="240dp"
+                android:layout_height="240dp"
+                android:layout_gravity="center"
+                android:background="@drawable/bg_glow" />
+
+            <View
                 android:id="@+id/ring"
                 android:layout_width="200dp"
                 android:layout_height="200dp"
@@ -130,9 +136,11 @@
                 android:layout_gravity="center"
                 android:background="@drawable/bg_main_button"
                 android:backgroundTint="@color/accent_dark"
-                android:elevation="8dp"
+                android:elevation="10dp"
+                android:foreground="@drawable/fg_main_button"
                 android:stateListAnimator="@null"
                 android:text="SIAGA"
+                android:letterSpacing="0.12"
                 android:textColor="#FFFFFFFF"
                 android:textSize="26sp"
                 android:textStyle="bold" />
@@ -195,7 +203,7 @@
 
             <Spinner
                 android:id="@+id/spinLens"
-                android:layout_width="150dp"
+                android:layout_width="180dp"
                 android:layout_height="44dp"
                 android:background="@drawable/bg_field"
                 android:paddingStart="8dp"
@@ -220,7 +228,7 @@
 
             <Spinner
                 android:id="@+id/spinResolution"
-                android:layout_width="150dp"
+                android:layout_width="180dp"
                 android:layout_height="44dp"
                 android:background="@drawable/bg_field"
                 android:paddingStart="8dp"
@@ -244,7 +252,7 @@
 
             <Spinner
                 android:id="@+id/spinFps"
-                android:layout_width="150dp"
+                android:layout_width="180dp"
                 android:layout_height="44dp"
                 android:background="@drawable/bg_field"
                 android:paddingStart="8dp"
