@@ -30,6 +30,7 @@ class VideoEngine(
     private val fps: Int,
     private val sink: ClipRecorder,
     private val stabilize: Boolean,
+    maxBitrate: Int,
     private val onError: (String) -> Unit,
 ) {
     private val cameraManager = context.getSystemService(CameraManager::class.java)
@@ -45,6 +46,9 @@ class VideoEngine(
 
     /** The frame rate the camera will really deliver (may be lower than asked). */
     val actualFps: Int = support.effectiveFps(fps)
+
+    /** Bitrate taken from the phone's own camera profile (see [CameraSupport.videoBitrate]). */
+    val bitrate: Int = support.videoBitrate(height, actualFps, maxBitrate)
 
     /**
      * Every timestamp in the app (audio, trigger, video) lives on the elapsedRealtime clock.
@@ -99,13 +103,13 @@ class VideoEngine(
         val size = support.sizeFor(height) ?: throw IllegalStateException("Resolusi ${height}p tidak didukung")
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, size.width, size.height).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-            setInteger(MediaFormat.KEY_BIT_RATE, CameraSupport.bitrate(height, actualFps))
+            setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
             setInteger(MediaFormat.KEY_FRAME_RATE, actualFps)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
             setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
         }
         val c = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-        c.setCallback(object : MediaCodec.Callback() {
+        val callback = object : MediaCodec.Callback() {
             override fun onInputBufferAvailable(codec: MediaCodec, index: Int) {}
 
             override fun onOutputBufferAvailable(codec: MediaCodec, index: Int, info: MediaCodec.BufferInfo) {
@@ -131,8 +135,27 @@ class VideoEngine(
             override fun onOutputFormatChanged(codec: MediaCodec, format: MediaFormat) {
                 try { sink.setVideoFormat(format) } catch (e: Exception) { onError("Gagal menyiapkan video: ${e.message}") }
             }
-        }, handler)
-        c.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        }
+        c.setCallback(callback, handler)
+        // Kamera bawaan memakai H.264 High profile (gambar lebih detail di bitrate yang sama).
+        // Kalau encoder menolak, ulang dengan pengaturan standar.
+        val high = runCatching {
+            c.codecInfo.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC).profileLevels
+                .filter { it.profile == MediaCodecInfo.CodecProfileLevel.AVCProfileHigh }
+                .maxByOrNull { it.level }
+        }.getOrNull()
+        val configured = high != null && runCatching {
+            val f = MediaFormat(format).apply {
+                setInteger(MediaFormat.KEY_PROFILE, high.profile)
+                setInteger(MediaFormat.KEY_LEVEL, high.level)
+            }
+            c.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        }.isSuccess
+        if (!configured) {
+            if (high != null) c.reset()
+            c.setCallback(callback, handler)
+            c.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        }
         val s = c.createInputSurface()
         c.start()
         codec = c
@@ -184,6 +207,13 @@ class VideoEngine(
                         val request = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                             addTarget(target)
                             set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, pickFpsRange(chars))
+                            // TEMPLATE_RECORD = olahan gambar yang disetel vendor untuk video (sama
+                            // dengan kamera bawaan). Pastikan 3A otomatis dan fokus kontinu video.
+                            set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
+                            val af = chars.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)
+                            if (af?.contains(CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO) == true) {
+                                set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
+                            }
                             if (stabilize) {
                                 val eis = chars.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)
                                 val ois = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION)

@@ -15,6 +15,7 @@ Pemilik proyek: bento. Berkomunikasi dalam bahasa Indonesia santai ("gua/lu"). P
 - Rilis: setiap push ke `main` menjalankan `.github/workflows/build.yml`, yang mengunduh model Vosk, menjalankan `./gradlew assembleDebug`, lalu menerbitkan APK sebagai **GitHub Release** `v0.1.<run_number>`. Tidak ada `upload-artifact` karena kuota artifact akun GitHub penuh; jangan ditambahkan lagi.
 - Lokal (butuh Android SDK): unduh `https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip`, ekstrak isinya ke `app/src/main/assets/model/` (folder ini di-gitignore), lalu `./gradlew assembleDebug`. Tanpa model, aplikasi jalan tapi Siaga langsung gagal dengan pesan "Model suara tidak ada di dalam APK".
 - `app/debug.keystore` sengaja di-commit (kunci debug sekali pakai, password `android`) supaya APK baru bisa dipasang menimpa versi lama tanpa uninstall. Jangan diganti tanpa alasan.
+- Emulator: `scripts/emu.sh` menyalakan AVD `hp-dev` (kamera belakang virtual, mic laptop, RAM 4 GB), mengunduh model kalau belum ada, build, pasang (boleh downgrade dari versi Releases), lalu membuka aplikasi. `scripts/emu.sh run` = tanpa build, `log` = logcat aplikasi, `stop` = matikan. `CAM=webcam0 scripts/emu.sh` memakai webcam laptop. Emulator tidak menggantikan uji di HP asli (encoder, stabilisasi, dan penghemat baterai berbeda).
 - Versi: AGP 8.7.3, Kotlin 2.0.21, Gradle 8.11.1, Java 17. Tidak ada test otomatis.
 
 ## Arsitektur
@@ -28,7 +29,7 @@ Semua kode ada di `app/src/main/java/id/straikcam/`. UI memakai View + ViewBindi
 | `AudioEngine.kt` | **Satu-satunya** pemakai mikrofon: `AudioRecord` 48 kHz mono. Tiap 100 ms data di-downsample ke 16 kHz untuk Vosk, dan (saat video di-encode) dikirim ke encoder AAC untuk suara video. |
 | `VideoEngine.kt` | Camera2 → `MediaCodec` H.264 lewat input surface. Keyframe tiap 1 detik. Stabilisasi video dinyalakan kalau tersedia. |
 | `ClipRecorder.kt` | Buffer berputar berisi frame yang sudah dikompres (pre-roll). Saat "straik", membuka `MediaMuxer` ke MediaStore (`Movies/StraikCam`, `IS_PENDING`), menulis mulai dari keyframe terakhir ≤ 30 detik sebelum trigger, lalu lanjut menulis frame live. Thread-safe. |
-| `CameraSupport.kt` | Kemampuan kamera belakang + encoder: ukuran 16:9 yang didukung, cek 60 fps, bitrate, sumber timestamp kamera. |
+| `CameraSupport.kt` | Kemampuan kamera belakang + encoder: ukuran 16:9 yang didukung, cek 60 fps, sumber timestamp kamera. Bitrate diambil dari profil kamera bawaan HP (`CamcorderProfile`/`EncoderProfiles`), HEVC dikonversi ×1.5 ke H.264, 60 fps ×1.5, dibatasi 50 Mbps saat pre-roll nyala. |
 | `WordListener.kt` (`object Words`) | Kata perintah, grammar Vosk, parsing hasil JSON, menyalin model dari assets ke `filesDir` sekali per versi aplikasi. |
 | `Feedback.kt` | Nada (sinus lewat `AudioTrack`, usage ALARM) dan getar. Naik = mulai, turun = berhenti, tiga bip = gagal. |
 | `Prefs.kt` | SharedPreferences: pre-roll, nada, getar, tinggi video, fps. |

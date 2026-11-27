@@ -7,6 +7,7 @@ import android.media.CamcorderProfile
 import android.media.MediaCodec
 import android.media.MediaCodecList
 import android.media.MediaFormat
+import android.media.MediaRecorder
 import android.os.Build
 import android.util.Size
 
@@ -18,6 +19,7 @@ import android.util.Size
 class CameraSupport(context: Context, wide: Boolean = false) {
 
     val cameraId: String
+    private val mainId: String
     val characteristics: CameraCharacteristics
     private val sizes: List<Size>
 
@@ -36,7 +38,7 @@ class CameraSupport(context: Context, wide: Boolean = false) {
             manager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) ==
                 CameraCharacteristics.LENS_FACING_BACK
         }
-        val mainId = back.firstOrNull() ?: throw IllegalStateException("Kamera belakang tidak ditemukan")
+        mainId = back.firstOrNull() ?: throw IllegalStateException("Kamera belakang tidak ditemukan")
         val mainChars = manager.getCameraCharacteristics(mainId)
 
         fun equivalentFocal(id: String): Float? {
@@ -93,16 +95,63 @@ class CameraSupport(context: Context, wide: Boolean = false) {
         return Size(profile.videoFrameWidth, profile.videoFrameHeight)
     }
 
-    private fun profile(height: Int): CamcorderProfile? {
-        val id = cameraId.toIntOrNull() ?: return null
-        val quality = when (height) {
-            720 -> CamcorderProfile.QUALITY_720P
-            1080 -> CamcorderProfile.QUALITY_1080P
-            2160 -> CamcorderProfile.QUALITY_2160P
-            else -> return null
-        }
-        return runCatching { if (CamcorderProfile.hasProfile(id, quality)) CamcorderProfile.get(id, quality) else null }.getOrNull()
+    private fun quality(height: Int) = when (height) {
+        720 -> CamcorderProfile.QUALITY_720P
+        1080 -> CamcorderProfile.QUALITY_1080P
+        2160 -> CamcorderProfile.QUALITY_2160P
+        else -> null
     }
+
+    private fun profile(height: Int): CamcorderProfile? {
+        val quality = quality(height) ?: return null
+        for (id in listOf(cameraId, mainId).distinct()) {
+            val n = id.toIntOrNull() ?: continue
+            runCatching { if (CamcorderProfile.hasProfile(n, quality)) return CamcorderProfile.get(n, quality) }
+        }
+        return null
+    }
+
+    /** Bitrate and frame rate the phone's own camera app records with (vendor media profile). */
+    data class StockProfile(val bitrate: Int, val fps: Int, val hevc: Boolean)
+
+    fun stockProfile(height: Int): StockProfile? {
+        val quality = quality(height) ?: return null
+        if (Build.VERSION.SDK_INT >= 31) {
+            for (id in listOf(cameraId, mainId).distinct()) {
+                val all = runCatching { CamcorderProfile.getAll(id, quality) }.getOrNull() ?: continue
+                val v = all.videoProfiles.filterNotNull()
+                val pick = v.firstOrNull { it.codec == MediaRecorder.VideoEncoder.H264 } ?: v.firstOrNull() ?: continue
+                return StockProfile(pick.bitrate, pick.frameRate, pick.codec == MediaRecorder.VideoEncoder.HEVC)
+            }
+        }
+        val p = profile(height) ?: return null
+        return StockProfile(p.videoBitRate, p.videoFrameRate, p.videoCodec == MediaRecorder.VideoEncoder.HEVC)
+    }
+
+    /**
+     * Bitrate that matches the built-in camera app: taken from the vendor profile, converted to
+     * H.264 when the profile is HEVC, and raised for 60 fps. Falls back to fixed values when the
+     * phone has no profile. Clamped to what the encoder accepts and to [max].
+     */
+    fun videoBitrate(height: Int, fps: Int, max: Int = Int.MAX_VALUE): Int {
+        val stock = stockProfile(height)
+        var br = if (stock != null && stock.bitrate > 0) {
+            var b = stock.bitrate.toLong()
+            if (stock.hevc) b = b * 3 / 2
+            if (fps > stock.fps && stock.fps > 0) b = b * 3 / 2
+            b.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        } else bitrate(height, fps)
+        br = br.coerceAtLeast(bitrate(height, fps) / 2)
+        val size = sizeFor(height)
+        val range = size?.let { avcCaps()?.videoCapabilities?.bitrateRange }
+        if (range != null) br = br.coerceIn(range.lower, range.upper)
+        return br.coerceAtMost(max)
+    }
+
+    private fun avcCaps(): android.media.MediaCodecInfo.CodecCapabilities? =
+        MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
+            .firstOrNull { it.isEncoder && it.supportedTypes.any { t -> t.equals(MediaFormat.MIMETYPE_VIDEO_AVC, true) } }
+            ?.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC)
 
     /** Encoder can do this size and rate. For 60 fps the camera may still refuse; see [cameraConfirms]. */
     fun supports(height: Int, fps: Int): Boolean {
@@ -154,7 +203,8 @@ class CameraSupport(context: Context, wide: Boolean = false) {
             val size = sizeFor(h)
             if (size == null) { append("${CameraSupport.label(h)}: tidak ada\n"); continue }
             val ms = minDurationsNs(size).joinToString("/") { if (it <= 0) "?" else "%.0f".format(it / 1_000_000.0) }
-            append("${CameraSupport.label(h)}: ${size.width}x${size.height} frame min $ms ms, profil ${profile(h)?.videoFrameRate ?: "-"}fps, encoder 60fps ${if (encoderSupports(size, 60)) "ya" else "tidak"}\n")
+            val stock = stockProfile(h)?.let { "${it.fps}fps ${it.bitrate / 1_000_000}Mbps${if (it.hevc) " HEVC" else ""}" } ?: "-"
+            append("${CameraSupport.label(h)}: ${size.width}x${size.height} frame min $ms ms, profil bawaan $stock, encoder 60fps ${if (encoderSupports(size, 60)) "ya" else "tidak"}\n")
         }
         val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
         val hs = map?.highSpeedVideoFpsRanges?.joinToString(" ") { "[${it.lower}-${it.upper}]" }

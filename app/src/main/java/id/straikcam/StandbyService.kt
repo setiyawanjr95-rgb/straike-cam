@@ -108,10 +108,12 @@ class StandbyService : Service() {
             preRollUs = if (preRoll) Prefs.PRE_ROLL_SECONDS * 1_000_000L else 0L,
             onFinished = ::onClipFinished,
         )
-        val vid = VideoEngine(this, cam, height, fps, rec, LensPrefs.stabilize(this)) { msg -> handler.post { fail(msg) } }
+        // Pre-roll menyimpan ~33 detik video di RAM, jadi bitrate dibatasi supaya tidak OutOfMemory.
+        val maxBitrate = if (preRoll) PRE_ROLL_MAX_BITRATE else Int.MAX_VALUE
+        val vid = VideoEngine(this, cam, height, fps, rec, LensPrefs.stabilize(this), maxBitrate) { msg -> handler.post { fail(msg) } }
         val aud = AudioEngine(loaded, vid::nowUs, rec, ::onWord) { msg -> fail(msg) }
         val realFps = vid.actualFps
-        qualityLabel = "${CameraSupport.label(height)} ${realFps}fps" +
+        qualityLabel = "${CameraSupport.label(height)} ${realFps}fps ${vid.bitrate / 1_000_000}Mbps" +
             (if (cam.usingUltraWide) " 0.5x" else "") +
             if (realFps < fps) " (kamera tidak mendukung ${fps}fps)" else ""
         recorder = rec
@@ -260,6 +262,8 @@ class StandbyService : Service() {
         )
 
     companion object {
+        /** Batas bitrate saat pre-roll nyala (50 Mbps x 33 detik masih muat di largeHeap). */
+        const val PRE_ROLL_MAX_BITRATE = 50_000_000
         const val ACTION_START = "id.straikcam.START"
         const val ACTION_STOP_RECORDING = "id.straikcam.STOP_RECORDING"
         const val ACTION_SHUTDOWN = "id.straikcam.SHUTDOWN"

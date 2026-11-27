@@ -90,7 +90,10 @@ class MainActivity : ComponentActivity() {
         binding.chkVibrate.isChecked = Prefs.vibrate(this)
         binding.chkStabilize.isChecked = LensPrefs.stabilize(this)
         binding.chkStabilize.setOnCheckedChangeListener { _, on -> LensPrefs.setStabilize(this, on) }
-        binding.chkPreRoll.setOnCheckedChangeListener { _, on -> Prefs.setPreRoll(this, on) }
+        binding.chkPreRoll.setOnCheckedChangeListener { _, on ->
+            Prefs.setPreRoll(this, on)
+            refreshQualityHint(VideoPrefs.height(this), VideoPrefs.fps(this))
+        }
         binding.chkSound.setOnCheckedChangeListener { _, on -> Prefs.setSound(this, on) }
         binding.chkVibrate.setOnCheckedChangeListener { _, on -> Prefs.setVibrate(this, on) }
 
@@ -199,7 +202,28 @@ class MainActivity : ComponentActivity() {
         binding.spinFps.adapter = adapter(fpsLabels)
         binding.spinFps.setSelection(index)
         VideoPrefs.setFps(this, fpsOptions[index])
-        binding.spinFps.onItemSelectedListener = onSelect { pos -> VideoPrefs.setFps(this, fpsOptions[pos]) }
+        binding.spinFps.onItemSelectedListener = onSelect { pos ->
+            VideoPrefs.setFps(this, fpsOptions[pos])
+            refreshQualityHint(height, fpsOptions[pos])
+        }
+        refreshQualityHint(height, fpsOptions[index])
+    }
+
+    /** Shows the bitrate taken from the phone's own camera app for this setting. */
+    private fun refreshQualityHint(height: Int, fps: Int) {
+        val s = support
+        if (s == null) {
+            binding.qualityHint.text = ""
+            return
+        }
+        val stock = s.stockProfile(height)
+        val cap = if (Prefs.preRoll(this)) StandbyService.PRE_ROLL_MAX_BITRATE else Int.MAX_VALUE
+        val mbps = s.videoBitrate(height, s.effectiveFps(fps), cap) / 1_000_000
+        binding.qualityHint.text = if (stock != null) {
+            "Ikut kamera bawaan HP: $mbps Mbps, H.264 High, olahan gambar bawaan."
+        } else {
+            "Profil kamera bawaan tidak terbaca, pakai $mbps Mbps."
+        }
     }
 
     private fun adapter(items: List<String>) =
